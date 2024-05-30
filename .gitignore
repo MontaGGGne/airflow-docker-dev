@@ -1,0 +1,20 @@
+*.devcontainer
+*.erlang.cookie
+*.cookie
+*.o
+*.env
+*.venv
+*.log
+*.idea
+*.github
+*.vscode
+rabbitmq/
+mnesia/
+test_rpc/
+unit_number_*
+airflow-data/
+logs/
+postgres-db-volume/
+plugins/*
+# cloud_env
+
