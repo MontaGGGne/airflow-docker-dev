@@ -79,6 +79,9 @@ s3_1 = session.client(
 # else:
 #     print("Havent Prefixes")
 
+
+############################################### airflow script ###############################################
+
 CURRENT_DIR = os.path.dirname(os.path.realpath(__file__))
 USE_DIR = os.path.join(os.path.split(CURRENT_DIR)[0], 'jsons')
 if not os.path.isdir(USE_DIR):
@@ -87,14 +90,37 @@ if not os.path.isdir(USE_DIR):
 
 s3_obj = s3_1.list_objects_v2(Bucket='nasa-turbofans', Prefix='units/', Delimiter = "/", MaxKeys=1000)
 if 'CommonPrefixes' in s3_obj:
-    last_time_prefix = s3_obj['CommonPrefixes'][-1]['Prefix']
-    last_time_bad = os.path.split(last_time_prefix.rstrip('/'))[-1]
+    all_prefixes = s3_obj['CommonPrefixes']
+    num_elements: int = 0
+    if len(all_prefixes) == 1:
+        num_elements = 1
+    elif len(all_prefixes) == 2:
+        num_elements = 2
+    else:
+        num_elements = 3
 
-    last_time_stamp = datetime.strptime(last_time_bad, '%Y-%m-%d %H:%M:%S').timestamp()
-    last_local_time = time.localtime(last_time_stamp)
-    last_time_good = time.strftime('%Y-%m-%d_%H-%M-%S', last_local_time)
+    elements = s3_obj['CommonPrefixes'][-num_elements:]
+    result_time_dir = ''
+    all_units_prefixes = []
+    for index, prefix in enumerate(elements):
+        last_time_prefix = s3_obj['CommonPrefixes'][-1]['Prefix']
 
-    last_time_dir = os.path.join(USE_DIR, last_time_good)
+        units_prefixes = s3_1.list_objects_v2(Bucket='nasa-turbofans', Prefix=last_time_prefix, Delimiter = "/", MaxKeys=1000)
+        if 'CommonPrefixes' in units_prefixes:
+            all_units_prefixes.extend(units_prefixes['CommonPrefixes'])
+
+        last_time_bad = os.path.split(last_time_prefix.rstrip('/'))[-1]
+        last_time_stamp = datetime.strptime(last_time_bad, '%Y-%m-%d %H:%M:%S').timestamp()
+        last_local_time = time.localtime(last_time_stamp)
+        last_time_good = time.strftime('%Y-%m-%d_%H-%M-%S', last_local_time)
+
+        if index == 0:
+            result_time_dir = last_time_good
+            continue
+        result_time_dir += f"+{last_time_good}"
+
+    last_time_dir = os.path.join(USE_DIR, result_time_dir)
+
     try:
         if not os.path.isdir(last_time_dir):
             os.mkdir(last_time_dir)
@@ -102,35 +128,77 @@ if 'CommonPrefixes' in s3_obj:
         print(traceback.format_exc())
         logging.error(traceback.format_exc())
         raise
-    all_units_prefixes = s3_1.list_objects_v2(Bucket='nasa-turbofans', Prefix=last_time_prefix, Delimiter = "/", MaxKeys=1000)
-    if 'CommonPrefixes' in all_units_prefixes:
-        for unit_prefix in all_units_prefixes['CommonPrefixes']:
-            current_unit = os.path.split(unit_prefix['Prefix'].rstrip('/'))[-1]
-            current_unit_dir = os.path.join(last_time_dir, current_unit)
-            try:
-                if not os.path.isdir(current_unit_dir):
-                    os.mkdir(current_unit_dir)
-            except Exception as e:
-                print(traceback.format_exc())
-                logging.error(traceback.format_exc())
-                raise
-            all_one_unit_jsons = s3_1.list_objects_v2(Bucket='nasa-turbofans', Prefix=unit_prefix['Prefix'], Delimiter = "/", MaxKeys=1000)
-            if 'Contents' in all_one_unit_jsons:
-                for unit_json in all_one_unit_jsons['Contents']:
-                    get_json_response = s3_1.get_object(Bucket='nasa-turbofans', Key=unit_json['Key'])
 
-                    json_name = os.path.split(unit_json['Key'].rstrip('/'))[-1]
-                    json_dir = os.path.join(current_unit_dir, json_name)
+    for unit_prefix in all_units_prefixes:
+        current_unit = os.path.split(unit_prefix['Prefix'].rstrip('/'))[-1]
+        current_unit_dir = os.path.join(last_time_dir, current_unit)
+        try:
+            if not os.path.isdir(current_unit_dir):
+                os.mkdir(current_unit_dir)
+        except Exception as e:
+            print(traceback.format_exc())
+            logging.error(traceback.format_exc())
+            raise
+        all_one_unit_jsons = s3_1.list_objects_v2(Bucket='nasa-turbofans', Prefix=unit_prefix['Prefix'], Delimiter = "/", MaxKeys=1000)
+        if 'Contents' in all_one_unit_jsons:
+            for unit_json in all_one_unit_jsons['Contents']:
+                get_json_response = s3_1.get_object(Bucket='nasa-turbofans', Key=unit_json['Key'])
 
-                    json_obj = json.loads(get_json_response['Body'].read())
-                    with open(json_dir, 'w') as json_write:
-                        json_obj = json.dump(json_obj, json_write)
-                    # print(get_json_response['Body'].read())
-    # s3_obj = s3_1.list_objects_v2(Bucket='nasa-turbofans', Prefix='test_quantity/unit_number_1/', Delimiter = "/", MaxKeys=1000)
-    # for key in s3_obj['CommonPrefixes']:
-    #     print(key['Prefix'])
-else:
-    print("Havent Prefixes")
+                json_name = os.path.split(unit_json['Key'].rstrip('/'))[-1]
+                json_dir = os.path.join(current_unit_dir, json_name)
+
+                json_obj = json.loads(get_json_response['Body'].read())
+                with open(json_dir, 'w') as json_write:
+                    json_obj = json.dump(json_obj, json_write)
+
+# CURRENT_DIR = os.path.dirname(os.path.realpath(__file__))
+# USE_DIR = os.path.join(os.path.split(CURRENT_DIR)[0], 'jsons')
+# if not os.path.isdir(USE_DIR):
+#     os.mkdir(USE_DIR)
+
+
+# s3_obj = s3_1.list_objects_v2(Bucket='nasa-turbofans', Prefix='units/', Delimiter = "/", MaxKeys=1000)
+# if 'CommonPrefixes' in s3_obj:
+#     last_time_prefix = s3_obj['CommonPrefixes'][-1]['Prefix']
+#     last_time_bad = os.path.split(last_time_prefix.rstrip('/'))[-1]
+
+#     last_time_stamp = datetime.strptime(last_time_bad, '%Y-%m-%d %H:%M:%S').timestamp()
+#     last_local_time = time.localtime(last_time_stamp)
+#     last_time_good = time.strftime('%Y-%m-%d_%H-%M-%S', last_local_time)
+
+#     last_time_dir = os.path.join(USE_DIR, last_time_good)
+#     try:
+#         if not os.path.isdir(last_time_dir):
+#             os.mkdir(last_time_dir)
+#     except Exception as e:
+#         print(traceback.format_exc())
+#         logging.error(traceback.format_exc())
+#         raise
+#     all_units_prefixes = s3_1.list_objects_v2(Bucket='nasa-turbofans', Prefix=last_time_prefix, Delimiter = "/", MaxKeys=1000)
+#     if 'CommonPrefixes' in all_units_prefixes:
+#         for unit_prefix in all_units_prefixes['CommonPrefixes']:
+#             current_unit = os.path.split(unit_prefix['Prefix'].rstrip('/'))[-1]
+#             current_unit_dir = os.path.join(last_time_dir, current_unit)
+#             try:
+#                 if not os.path.isdir(current_unit_dir):
+#                     os.mkdir(current_unit_dir)
+#             except Exception as e:
+#                 print(traceback.format_exc())
+#                 logging.error(traceback.format_exc())
+#                 raise
+#             all_one_unit_jsons = s3_1.list_objects_v2(Bucket='nasa-turbofans', Prefix=unit_prefix['Prefix'], Delimiter = "/", MaxKeys=1000)
+#             if 'Contents' in all_one_unit_jsons:
+#                 for unit_json in all_one_unit_jsons['Contents']:
+#                     get_json_response = s3_1.get_object(Bucket='nasa-turbofans', Key=unit_json['Key'])
+
+#                     json_name = os.path.split(unit_json['Key'].rstrip('/'))[-1]
+#                     json_dir = os.path.join(current_unit_dir, json_name)
+
+#                     json_obj = json.loads(get_json_response['Body'].read())
+#                     with open(json_dir, 'w') as json_write:
+#                         json_obj = json.dump(json_obj, json_write)
+
+#     print("Havent Prefixes")
 
 
 # if __name__ == "__main__":
