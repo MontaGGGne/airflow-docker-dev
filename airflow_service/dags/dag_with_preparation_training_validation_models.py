@@ -11,8 +11,8 @@ AWS_SECRET_ACCESS_KEY = 'YCNb7r_yUdhEOpHGQEW4xrUSv9_8TGjiFEr447fb'
 
 default_args = {
     'owner': 'airflow',
-    'start_date': datetime.now() - timedelta(days=1),
-    'retries': 1
+    'start_date': datetime.now(),
+    'retries': 5
 }
 
 
