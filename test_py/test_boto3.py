@@ -93,7 +93,7 @@ if 'CommonPrefixes' in s3_obj:
     all_prefixes = s3_obj['CommonPrefixes']
     num_elements: int = 0
     if len(all_prefixes) == 1:
-        num_elements = 1
+        num_elements = 1    
     elif len(all_prefixes) == 2:
         num_elements = 2
     else:
