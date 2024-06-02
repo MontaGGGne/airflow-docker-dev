@@ -13,7 +13,7 @@ from PrepData.PrepData import PrepData
 
 default_args = {
     'owner': 'airflow',
-    'start_date': datetime(2024, 6, 4),
+    # 'start_date': datetime.today() - timedelta(days=1), # datetime(2024, 6, 4)
     'retries': 5,
     'retry_delay': timedelta(seconds=10)
 }
@@ -21,27 +21,26 @@ default_args = {
 @dag(
     dag_id='dag_with_preparation_training_validation_models',
     default_args=default_args,
+    start_date=datetime(2024, 6, 1), # datetime.today() - timedelta(days=1) + timedelta(hours=2),
     schedule_interval="@daily" # timedelta(days=1)
     )
 def example_dag():
 
-    @task(multiple_outputs=True, task_id="connect_to_s3")
-    def s3_connection():
+    @task(task_id="put_jsons_from_s3_to_local")
+    def get_jsons_from_s3_to_local(**kwargs):
+        DATA_WINDOW = 3
+        CURRENT_DIR = os.path.dirname(os.path.realpath(__file__))
+        DATE_TIME_TEST = datetime(2024, 6, 4)
+        USE_DIR = os.path.join(os.path.split(CURRENT_DIR)[0], 'jsons')
         AWS_ACCESS_KEY_ID = 'YCAJELpBT8X-vIXGQlDICwbEP'
         AWS_SECRET_ACCESS_KEY = 'YCNb7r_yUdhEOpHGQEW4xrUSv9_8TGjiFEr447fb'
+
         session = boto3.session.Session()
         s3 = session.client(
             service_name='s3',
             endpoint_url='https://storage.yandexcloud.net',
             aws_access_key_id = AWS_ACCESS_KEY_ID,
             aws_secret_access_key = AWS_SECRET_ACCESS_KEY)
-        return s3
-
-    @task(task_id="put_jsons_from_s3_to_local")
-    def get_jsons_from_s3_to_local(s3, **kwargs):
-        DATA_WINDOW = 3
-        CURRENT_DIR = os.path.dirname(os.path.realpath(__file__))
-        USE_DIR = os.path.join(os.path.split(CURRENT_DIR)[0], 'jsons')
 
         # s3 = kwargs["task_instance"].xcom_pull(task_ids="s3_connection", key="s3")
 
@@ -52,11 +51,12 @@ def example_dag():
             os.mkdir(USE_DIR)
 
         try:
-            cur_time: datetime = kwargs['logical_date'] # ds
-            print(cur_time)
+            # cur_time: datetime = kwargs['logical_date'] # ds
+            cur_time = DATE_TIME_TEST
+            logging.info(f"CURRENT TIME: {cur_time}")
         except:
             cur_time: datetime = kwargs['ds'] # ds
-            print(cur_time)
+            logging.info(f"CURRENT TIME: {cur_time}")
 
         cur_time_sec = cur_time.timestamp()
         struct_cur_time = time.localtime(cur_time_sec)
@@ -76,7 +76,11 @@ def example_dag():
         create_date_dir: str = ''
         for index, date_id in enumerate(last_time_window[::-1]):
             date_prefix = f"units/{date_id}/"
-            s3_obj = s3.list_objects_v2(Bucket='nasa-turbofans', Prefix=date_prefix, Delimiter = "/", MaxKeys=1000)
+            try:
+                s3_obj = s3.list_objects_v2(Bucket='nasa-turbofans', Prefix=date_prefix, Delimiter = "/", MaxKeys=1000)
+            except Exception as e:
+                logging.error(traceback.format_exc())
+                raise
             if 'CommonPrefixes' not in s3_obj:
                 continue  
             else:
@@ -98,21 +102,27 @@ def example_dag():
                 if not os.path.isdir(current_unit_dir):
                     os.mkdir(current_unit_dir)
             except Exception as e:
-                print(traceback.format_exc())
                 logging.error(traceback.format_exc())
                 raise
-            all_one_unit_jsons = s3.list_objects_v2(Bucket='nasa-turbofans', Prefix=unit_prefix['Prefix'], Delimiter = "/", MaxKeys=1000)
+            try:
+                all_one_unit_jsons = s3.list_objects_v2(Bucket='nasa-turbofans', Prefix=unit_prefix['Prefix'], Delimiter = "/", MaxKeys=1000)
+            except Exception as e:
+                logging.error(traceback.format_exc())
+                raise
             if 'Contents' in all_one_unit_jsons:
                 for unit_json in all_one_unit_jsons['Contents']:
-                    get_json_response = s3.get_object(Bucket='nasa-turbofans', Key=unit_json['Key'])
-
+                    try:
+                        get_json_response = s3.get_object(Bucket='nasa-turbofans', Key=unit_json['Key'])
+                    except Exception as e:
+                        logging.error(traceback.format_exc())
+                        raise
                     json_name = os.path.split(unit_json['Key'].rstrip('/'))[-1]
                     json_dir = os.path.join(current_unit_dir, json_name)
 
                     json_obj = json.loads(get_json_response['Body'].read())
                     with open(json_dir, 'w') as json_write:
                         json_obj = json.dump(json_obj, json_write)
-        
+        logging.info(f"Path to date dir with units: {date_dir_path}")
         return date_dir_path
 
     @task(multiple_outputs=True, task_id="organization_of_preprocessing_data")
@@ -123,8 +133,7 @@ def example_dag():
                                                 out_dir=out_dir)
         return {"prep_data_dir": out_dir, "prep_data_res": prep_data_res}
     
-    s3 = s3_connection()
-    jsons_dir_path = get_jsons_from_s3_to_local(s3)
+    jsons_dir_path = get_jsons_from_s3_to_local()
     preprocess_data_dir = preprocess_data(jsons_dir_path)
 
 greet_dag = example_dag()
