@@ -6,6 +6,8 @@ import traceback
 import time
 from datetime import datetime
 
+from typing import Dict, Any
+
 
 session = boto3.session.Session()
 s3_1 = session.client(

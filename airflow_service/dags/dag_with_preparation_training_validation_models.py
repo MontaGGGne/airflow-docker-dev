@@ -7,21 +7,26 @@ import traceback
 import shutil
 from airflow.decorators import dag
 from airflow.decorators import task
-from datetime import datetime, timedelta
-from PrepData.PrepData import PrepData
+from datetime import datetime
+from datetime import timedelta
+from datetime import date
+from prepData.prepData import PrepData
+from train.train import Autoencoder_Model
+
+YESTURDEY = date.today() - timedelta(days=1)
 
 
 default_args = {
     'owner': 'airflow',
     # 'start_date': datetime.today() - timedelta(days=1), # datetime(2024, 6, 4)
     'retries': 5,
-    'retry_delay': timedelta(seconds=10)
+    'retry_delay': timedelta(seconds=5)
 }
 
 @dag(
     dag_id='dag_with_preparation_training_validation_models',
     default_args=default_args,
-    start_date=datetime(2024, 6, 1), # datetime.today() - timedelta(days=1) + timedelta(hours=2),
+    start_date=datetime(YESTURDEY.year, YESTURDEY.month, YESTURDEY.day), # datetime(2024, 6, 2), # datetime.today() - timedelta(days=1),
     schedule_interval="@daily" # timedelta(days=1)
     )
 def example_dag():
@@ -71,7 +76,7 @@ def example_dag():
             upper_time = cur_time_sec - up_time_skip
             str_upper_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(upper_time))
             last_time_window.append(str_upper_time)
-            up_time_skip *= 2
+            up_time_skip += timedelta(days=1).total_seconds()
 
         create_date_dir: str = ''
         for index, date_id in enumerate(last_time_window[::-1]):
@@ -92,29 +97,35 @@ def example_dag():
                     create_date_dir += f"{only_date}_"
 
         date_dir_path = os.path.join(USE_DIR, create_date_dir)
-        if not os.path.isdir(date_dir_path):
-            os.mkdir(date_dir_path)
+        try:
+            if not os.path.isdir(date_dir_path):
+                os.mkdir(date_dir_path)
+        except Exception as e:
+            logging.error(f"ERROR: make date_dir_path - {traceback.format_exc()}")
+            raise
 
         for unit_prefix in all_units_prefixes:
             current_unit = os.path.split(unit_prefix['Prefix'].rstrip('/'))[-1]
+
             current_unit_dir = os.path.join(date_dir_path, current_unit)
             try:
                 if not os.path.isdir(current_unit_dir):
                     os.mkdir(current_unit_dir)
             except Exception as e:
-                logging.error(traceback.format_exc())
+                logging.error(f"ERROR: make current_unit_dir - {traceback.format_exc()}")
                 raise
+
             try:
-                all_one_unit_jsons = s3.list_objects_v2(Bucket='nasa-turbofans', Prefix=unit_prefix['Prefix'], Delimiter = "/", MaxKeys=1000)
+                get_all_one_unit_jsons = s3.list_objects_v2(Bucket='nasa-turbofans', Prefix=unit_prefix['Prefix'], Delimiter = "/", MaxKeys=1000)
             except Exception as e:
-                logging.error(traceback.format_exc())
+                logging.error(f"ERROR: all_one_unit_jsons - {traceback.format_exc()}")
                 raise
-            if 'Contents' in all_one_unit_jsons:
-                for unit_json in all_one_unit_jsons['Contents']:
+            if 'Contents' in get_all_one_unit_jsons:
+                for unit_json in get_all_one_unit_jsons['Contents']:
                     try:
                         get_json_response = s3.get_object(Bucket='nasa-turbofans', Key=unit_json['Key'])
                     except Exception as e:
-                        logging.error(traceback.format_exc())
+                        logging.error(f"ERROR: get_json_response - {traceback.format_exc()}")
                         raise
                     json_name = os.path.split(unit_json['Key'].rstrip('/'))[-1]
                     json_dir = os.path.join(current_unit_dir, json_name)
@@ -128,12 +139,43 @@ def example_dag():
     @task(multiple_outputs=True, task_id="organization_of_preprocessing_data")
     def preprocess_data(date_dir_path):
         current_dir = os.path.dirname(os.path.realpath(__file__))
-        out_dir = os.path.join(os.path.split(current_dir)[0], 'prep_data_out')
-        prep_data_res = PrepData.employ_Pipline(inp_dir=date_dir_path,
-                                                out_dir=out_dir)
-        return {"prep_data_dir": out_dir, "prep_data_res": prep_data_res}
+
+        processed_path_dir = os.path.join(os.path.split(current_dir)[0], 'processed')
+        try:
+            if not os.path.isdir(processed_path_dir):
+                os.mkdir(processed_path_dir)
+        except Exception as e:
+            logging.error(f"ERROR: processed_path_dir - {traceback.format_exc()}")
+            raise
+        final_path_dir = os.path.join(os.path.split(current_dir)[0], 'final')
+        try:
+            if not os.path.isdir(final_path_dir):
+                os.mkdir(final_path_dir)
+        except Exception as e:
+            logging.error(F"ERROR: final_path_dir - {traceback.format_exc()}")
+            raise
+        try:
+            PrepData.start_prepData(path_raw=date_dir_path,
+                                    path_processed=processed_path_dir,
+                                    path_final=final_path_dir )
+        except Exception as e:
+            logging.error(F"ERROR: res - PrepData.start_prepData - {traceback.format_exc()}")
+            raise 
+        return {"processed_path_dir": processed_path_dir, "final_path_dir": final_path_dir}
+    
+    @task(task_id="train_and_valid_data")
+    def train_and_vaild_data(path_Train_data, path_Valid_Data, path_Predict_Data):
+        autoencoder = Autoencoder_Model()
+
+        res_autoencoder = autoencoder.start_all_processes(path_Train_data, path_Valid_Data, path_Predict_Data)
+
+        logging.info(f"res_autoencoder - {res_autoencoder}")
+        print(res_autoencoder)
     
     jsons_dir_path = get_jsons_from_s3_to_local()
     preprocess_data_dir = preprocess_data(jsons_dir_path)
+
+    path_Train_data = os.path.join(preprocess_data_dir["final_path_dir"], "Train.csv")
+    train_and_vaild_data(path_Train_data, path_Train_data, path_Train_data)
 
 greet_dag = example_dag()

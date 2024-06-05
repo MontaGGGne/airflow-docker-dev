@@ -27,3 +27,10 @@ print(list_csv)
 #     csvreader = csv.reader(csvfile)
 #     for row in csvreader:
 #         print(row)
+
+num_count = 0
+for num in set(unit_numbers):
+    if num_count == 0:
+        num_count = unit_numbers.count(num)
+    elif unit_numbers.count(num) < num_count:
+        num_count = unit_numbers.count(num)
