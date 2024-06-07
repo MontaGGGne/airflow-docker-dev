@@ -12,6 +12,7 @@ from datetime import timedelta
 from datetime import date
 from prepData.prepData import PrepData
 from train.train import Autoencoder_Model
+from typing import Dict
 
 YESTURDEY = date.today() - timedelta(days=1)
 
@@ -34,8 +35,9 @@ def example_dag():
     @task(task_id="put_jsons_from_s3_to_local")
     def get_jsons_from_s3_to_local(**kwargs):
         DATA_WINDOW = 3
-        CURRENT_DIR = os.path.dirname(os.path.realpath(__file__))
         DATE_TIME_TEST = datetime(2024, 6, 4)
+
+        CURRENT_DIR = os.path.dirname(os.path.realpath(__file__))
         USE_DIR = os.path.join(os.path.split(CURRENT_DIR)[0], 'jsons')
         AWS_ACCESS_KEY_ID = 'YCAJELpBT8X-vIXGQlDICwbEP'
         AWS_SECRET_ACCESS_KEY = 'YCNb7r_yUdhEOpHGQEW4xrUSv9_8TGjiFEr447fb'
@@ -137,7 +139,7 @@ def example_dag():
         return date_dir_path
 
     @task(multiple_outputs=True, task_id="organization_of_preprocessing_data")
-    def preprocess_data(date_dir_path):
+    def preprocess_data(date_dir_path) -> Dict[str, str]:
         current_dir = os.path.dirname(os.path.realpath(__file__))
 
         processed_path_dir = os.path.join(os.path.split(current_dir)[0], 'processed')
@@ -164,18 +166,23 @@ def example_dag():
         return {"processed_path_dir": processed_path_dir, "final_path_dir": final_path_dir}
     
     @task(task_id="train_and_valid_data")
-    def train_and_vaild_data(path_Train_data, path_Valid_Data, path_Predict_Data):
+    def train_and_vaild_data(path_Train_data, path_Valid_Data, path_Predict_Data, **kwargs):
+        cur_date_time = time.time()
+        loc_cur_date_time = time.localtime(cur_date_time)
+        str_cur_date_time = time.strftime('%Y-%m-%d_%H-%M-%S', loc_cur_date_time)
+
         autoencoder = Autoencoder_Model()
 
-        res_autoencoder = autoencoder.start_all_processes(path_Train_data, path_Valid_Data, path_Predict_Data)
+        res_autoencoder = autoencoder.start_all_processes(path_Train_data, path_Valid_Data, path_Predict_Data, str_cur_date_time)
 
         logging.info(f"res_autoencoder - {res_autoencoder}")
         print(res_autoencoder)
     
     jsons_dir_path = get_jsons_from_s3_to_local()
-    preprocess_data_dir = preprocess_data(jsons_dir_path)
 
-    path_Train_data = os.path.join(preprocess_data_dir["final_path_dir"], "Train.csv")
+    preprocess_data_dir: Dict[str, str] = preprocess_data(jsons_dir_path)
+
+    path_Train_data = os.path.join(str(preprocess_data_dir["final_path_dir"]), "Train.csv")
     train_and_vaild_data(path_Train_data, path_Train_data, path_Train_data)
 
 greet_dag = example_dag()
