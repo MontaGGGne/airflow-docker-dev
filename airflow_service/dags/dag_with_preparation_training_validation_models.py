@@ -142,6 +142,9 @@ def example_dag():
     def preprocess_data(date_dir_path) -> Dict[str, str]:
         current_dir = os.path.dirname(os.path.realpath(__file__))
 
+        name_file_train="Train.csv",
+        name_file_test="Test.csv"
+
         processed_path_dir = os.path.join(os.path.split(current_dir)[0], 'processed')
         try:
             if not os.path.isdir(processed_path_dir):
@@ -157,32 +160,45 @@ def example_dag():
             logging.error(F"ERROR: final_path_dir - {traceback.format_exc()}")
             raise
         try:
-            PrepData.start_prepData(path_raw=date_dir_path,
-                                    path_processed=processed_path_dir,
-                                    path_final=final_path_dir )
+            PrepData.start_prepData_for_add_traine(path_raw=date_dir_path,
+                                                   path_final=final_path_dir,
+                                                   Name_file_train=name_file_train,
+                                                   Name_file_test=name_file_test)
         except Exception as e:
             logging.error(F"ERROR: res - PrepData.start_prepData - {traceback.format_exc()}")
             raise 
-        return {"processed_path_dir": processed_path_dir, "final_path_dir": final_path_dir}
+        return {"name_file_train": name_file_train, "name_file_test": name_file_test, "final_path_dir": final_path_dir}
     
     @task(task_id="train_and_valid_data")
-    def train_and_vaild_data(path_Train_data, path_Valid_Data, path_Predict_Data, **kwargs):
+    def train_and_vaild_data(preprocess_data_dir_dict, **kwargs):
+        DAGSHUB_USER = "Dimitriy200"
+        DAGSHUB_PASS = "RamZaZ3961%"
+        DAGSHUB_TOKEN = "a1482d904ec14cd6e61aa6fcc9df96278dc7c911"
+        
+        final_path_dir = str(preprocess_data_dir_dict["final_path_dir"])
+        name_file_train = str(preprocess_data_dir_dict["name_file_train"])
+        name_file_test = str(preprocess_data_dir_dict["name_file_test"])
+
+        path_to_train = os.path.join(final_path_dir, name_file_train)
+        path_to_test = os.path.join(final_path_dir, name_file_test)
+        
         cur_date_time = time.time()
         loc_cur_date_time = time.localtime(cur_date_time)
         str_cur_date_time = time.strftime('%Y-%m-%d_%H-%M-%S', loc_cur_date_time)
 
         autoencoder = Autoencoder_Model()
 
-        res_autoencoder = autoencoder.start_all_processes(path_Train_data, path_Valid_Data, path_Predict_Data, str_cur_date_time)
-
+        res_autoencoder = autoencoder.add_train(path_to_train=path_to_train,
+                                                path_to_valid=path_to_test,
+                                                dagshub_toc_username=DAGSHUB_USER,
+                                                dagshub_toc_pass=DAGSHUB_PASS,
+                                                dagshub_toc_tocen=DAGSHUB_TOKEN)
         logging.info(f"res_autoencoder - {res_autoencoder}")
-        print(res_autoencoder)
     
     jsons_dir_path = get_jsons_from_s3_to_local()
 
-    preprocess_data_dir: Dict[str, str] = preprocess_data(jsons_dir_path)
+    preprocess_data_dir = preprocess_data(jsons_dir_path)
 
-    path_Train_data = os.path.join(str(preprocess_data_dir["final_path_dir"]), "Train.csv")
-    train_and_vaild_data(path_Train_data, path_Train_data, path_Train_data)
+    train_and_vaild_data(preprocess_data_dir)
 
 greet_dag = example_dag()

@@ -21,8 +21,8 @@ RUN pip uninstall keras
 RUN pip uninstall tensorflow
 RUN pip cache purge
 
-RUN pip install ./train_and_valid_model-0.2.8-py3-none-any.whl
-RUN pip install ./preprocess_data-0.1.1-py3-none-any.whl
+RUN pip install ./train_and_valid_model-0.2.15-py3-none-any.whl
+RUN pip install ./preprocess_data-0.1.10-py3-none-any.whl
 
 
 RUN pip install -r /requirements.txt
