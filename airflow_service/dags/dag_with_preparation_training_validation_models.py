@@ -35,7 +35,7 @@ def example_dag():
     @task(task_id="put_jsons_from_s3_to_local")
     def get_jsons_from_s3_to_local(**kwargs):
         DATA_WINDOW = 3
-        DATE_TIME_TEST = datetime(2024, 6, 4)
+        DATE_TIME_TEST = datetime(2024, 6, 16)
 
         CURRENT_DIR = os.path.dirname(os.path.realpath(__file__))
         USE_DIR = os.path.join(os.path.split(CURRENT_DIR)[0], 'jsons')
@@ -142,7 +142,7 @@ def example_dag():
     def preprocess_data(date_dir_path) -> Dict[str, str]:
         current_dir = os.path.dirname(os.path.realpath(__file__))
 
-        name_file_train="Train.csv",
+        name_file_train="Train.csv"
         name_file_test="Test.csv"
 
         processed_path_dir = os.path.join(os.path.split(current_dir)[0], 'processed')
