@@ -93,6 +93,13 @@ services:
   airflow-scheduler:
     <<: *airflow-common
     command: scheduler
+    environment:
+      <<: *airflow-common-env
+      AWS_ACCESS_KEY_ID: "${AWS_ACCESS_READ_KEY_ID}"
+      AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_READ_KEY}"
+      DAGSHUB_USER: "${DAGSHUB_USER}"
+      DAGSHUB_PASS: "${DAGSHUB_PASSWORD}"
+      DAGSHUB_TOKEN: "${DAGSHUB_TOKEN}"
     restart: always
 
   airflow-init:

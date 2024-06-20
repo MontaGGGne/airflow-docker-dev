@@ -13,6 +13,8 @@ from datetime import date
 from prepData.prepData import PrepData
 from train.train import Autoencoder_Model
 from typing import Dict
+from dotenv import load_dotenv
+
 
 YESTURDEY = date.today() - timedelta(days=1)
 
@@ -34,6 +36,8 @@ def example_dag():
 
     @task(task_id="put_jsons_from_s3_to_local")
     def get_jsons_from_s3_to_local(**kwargs):
+        load_dotenv()
+
         DATA_WINDOW = 3
         DATE_TIME_TEST = datetime(2024, 6, 16)
 
@@ -140,6 +144,8 @@ def example_dag():
 
     @task(multiple_outputs=True, task_id="organization_of_preprocessing_data")
     def preprocess_data(date_dir_path) -> Dict[str, str]:
+        load_dotenv()
+
         current_dir = os.path.dirname(os.path.realpath(__file__))
 
         name_file_train="Train.csv"
@@ -171,9 +177,14 @@ def example_dag():
     
     @task(task_id="train_and_valid_data")
     def train_and_vaild_data(preprocess_data_dir_dict, **kwargs):
-        DAGSHUB_USER = "Dimitriy200"
-        DAGSHUB_PASS = "RamZaZ3961%"
-        DAGSHUB_TOKEN = "a1482d904ec14cd6e61aa6fcc9df96278dc7c911"
+        load_dotenv()
+
+        DAGSHUB_USER = os.environ.get("DAGSHUB_USER")
+        logging.info(f"DAGSHUB_USER: {DAGSHUB_USER}")
+        DAGSHUB_PASS = os.environ.get("DAGSHUB_PASS")
+        logging.info(f"DAGSHUB_PASS: {DAGSHUB_PASS}")
+        DAGSHUB_TOKEN = os.environ.get("DAGSHUB_TOKEN")
+        logging.info(f"DAGSHUB_TOKEN: {DAGSHUB_TOKEN}")
         
         final_path_dir = str(preprocess_data_dir_dict["final_path_dir"])
         name_file_train = str(preprocess_data_dir_dict["name_file_train"])
